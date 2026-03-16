@@ -8,7 +8,7 @@
 
 ## What is this
 
-A static timer system for Unity built on PlayerLoop. Replaces coroutines and Invoke for delayed and repeated calls - one line, no setup.
+A static timer system for Unity built on PlayerLoop. Replaces coroutines and Invoke for delayed and repeated calls — one line, no setup.
 
 ```csharp
 Timer.After(2f, () => Explode());
@@ -20,7 +20,7 @@ Timer.EveryFrame(UpdateUI);
 
 ## Install
 
-Import `Goofy-Timer.unitypackage` into your project or copy `Timer.cs` anywhere into your `Assets/` folder.
+Import `Goofy-Timer.unitypackage` into your project or copy `Timer.cs` into your `Assets/` folder.
 
 Initializes automatically via `RuntimeInitializeOnLoadMethod`. No prefabs, no managers, nothing to configure.
 
@@ -28,42 +28,30 @@ Initializes automatically via `RuntimeInitializeOnLoadMethod`. No prefabs, no ma
 
 ## Usage
 
-### After - one-shot delay
 ```csharp
+// ── One-shot delay ─────────────────────────────────────────
 Timer.After(3f, () => Debug.Log("3 seconds later"));
-```
 
-### Repeat - interval
-```csharp
+// ── Interval ───────────────────────────────────────────────
 Timer.Repeat(1f, SpawnEnemy);
-```
 
-### EveryFrame - runs every Update
-```csharp
+// ── Every frame ────────────────────────────────────────────
 Timer.EveryFrame(TrackTarget);
-```
 
-### Cancel
-```csharp
+// ── Cancel ─────────────────────────────────────────────────
 Action cancel = Timer.Repeat(1f, SpawnEnemy);
-cancel(); // stop
-```
+cancel();
 
-### Auto-cancel when object is destroyed
-```csharp
+// ── Auto-cancel when object is destroyed ───────────────────
 Timer.After(5f, () => enemy.Die(), enemy);
 Timer.Repeat(1f, UpdateUI, this);
-// if enemy/this is destroyed - timer cancels automatically, no NullReferenceException
-```
+// if enemy/this is destroyed — cancels automatically, no NullReferenceException
 
-### Pause / Resume
-```csharp
+// ── Pause / Resume ─────────────────────────────────────────
 Timer.Pause();
-Timer.Resume(); // endTime shifts by pause duration, no shitty burst on resume
-```
+Timer.Resume(); // endTime shifts by pause duration, no burst on resume
 
-### CancelAll
-```csharp
+// ── Cancel everything ──────────────────────────────────────
 Timer.CancelAll();
 ```
 
@@ -84,23 +72,36 @@ Zero allocations in runtime. One PlayerLoop injection on startup, runs alongside
 
 ## How it works
 
-- Injects into Unity's `PlayerLoop` at `Update` - no MonoBehaviour needed
-- Tracks entries in a `List` with swap-and-pop removal - O(1) delete
-- Cancel via flag, not search - O(1)
-- `WeakReference` on target object - auto-cancels if object is destroyed
-- `try/catch` per callback - one broken timer doesn't kill the rest
-- Pause shifts `endTime` on all entries - no burst fire after resume
+| | |
+|---|---|
+| 🔁 **Loop** | Injects into `PlayerLoop` at `Update` — no MonoBehaviour needed |
+| ⚡ **Removal** | Swap-and-pop on List — O(1) delete |
+| 🚩 **Cancel** | Via flag, not search — O(1) |
+| 🛡️ **Null-safety** | `WeakReference` on target — auto-cancels if object is destroyed |
+| 🔒 **Resilience** | `try/catch` per callback — one broken timer doesn't kill the rest |
+| ⏸️ **Pause** | Shifts `endTime` on all entries — no burst fire after resume |
 
 ---
 
 ## Limitations
 
-- Timers run on `Time.time` - affected by `Time.timeScale`. Pass `Time.unscaledTime` manually if needed
-- Not thread-safe - call from main thread only (same as all Unity API)
-- `CancelAll` cancels everything globally - use cancel actions for granular control
+- Timers run on `Time.time` — affected by `Time.timeScale`. Use `Time.unscaledTime` manually if needed
+- Not thread-safe — call from main thread only (same as all Unity API)
+- `CancelAll` cancels everything globally — use cancel actions for granular control
+
+---
+
+## Part of the Goofy Tools collection
+
+| | |
+|---|---|
+| [**goofy-pooling**](https://github.com/youpzdev/unity-goofy-pooling) | 🐟 Zero-config object pooling |
+| **goofy-timers** | ⏱️ You are here |
+| [**goofy-eventbus**](https://github.com/youpzdev/unity-goofy-eventbus) | 📡 Type-safe event bus |
+| [**goofy-saves**](https://github.com/youpzdev/unity-goofy-saves) | 💾 AES-256 encrypted save system |
 
 ---
 
 ## License
 
-MIT - do whatever you want.
+MIT — do whatever you want.
