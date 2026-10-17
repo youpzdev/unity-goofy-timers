@@ -14,6 +14,9 @@ respawn.Pause();
 respawn.Resume();
 respawn.Cancel();
 bool waiting = respawn.IsActive;
+float secondsLeft = respawn.Remaining;
+bool restarted = respawn.Restart(2f);
+respawn.Restart();
 
 var heartbeat = Timer.Every(1f, Heartbeat, this, unscaledTime: true);
 var frame = Timer.OnUpdate(UpdateCountdown, this);
@@ -21,9 +24,23 @@ var frame = Timer.OnUpdate(UpdateCountdown, this);
 
 After, Repeat and EveryFrame keep their original signatures and Action
 cancellation API, including method-group binding to existing delegates. Schedule,
-Every and OnUpdate return TimerHandle with Pause, Resume, Cancel, IsActive
-and IsPaused. Paused handles remain active. Cancelled and completed handles
-cannot be restarted. Calling Pause, Resume or Cancel repeatedly is safe.
+Every and OnUpdate return TimerHandle with Pause, Resume, Cancel, Restart,
+Remaining, IsActive and IsPaused. Paused handles remain active. Calling Pause,
+Resume or Cancel repeatedly is safe. Resume never revives an inactive handle;
+Restart explicitly revives cancelled and completed handles.
+
+Remaining reports the nonnegative delay until the next callback, using the
+selected clock. Individual and global pauses freeze it. Inactive handles and
+OnUpdate handles report zero.
+
+Restart() starts the last configured delay again. Restart(delay) changes that
+delay, including the interval of a repeating timer and future Restart() calls.
+Restart preserves individual pause, including a cancelled paused handle.
+During global pause its new delay begins after Timer.Resume. Restart returns
+false if the owner has been destroyed, and true when the handle is scheduled.
+An owner cannot be replaced through Restart. Invalid delays throw without
+changing the timer. OnUpdate accepts Restart() or Restart(0); a nonzero delay
+throws ArgumentOutOfRangeException because frame callbacks have no deadline.
 
 Timers use scaled Time.time by default. Pass unscaledTime: true to Schedule
 or Every to use Time.unscaledTime, including while timeScale is zero.
@@ -43,6 +60,8 @@ Callbacks scheduled from another callback start on the next update. Cancel
 and CancelAll take effect immediately, including during callback execution.
 CancelAll also invalidates existing handles. A callback can schedule a new
 timer after CancelAll; the new timer waits until the next update.
+Restart from inside any callback also waits until the next update, including
+when the restarted handle already exists later in the current update list.
 
 A repeating timer executes once when due and schedules its next interval from
 that update. Missed intervals are skipped. An interval of zero means once per
@@ -55,7 +74,8 @@ PlayerLoop registration replaces the previous Timer callback to prevent
 multiple updates after repeated initialization. This API is main-thread only.
 
 Tests/Editor/TimerTests.cs covers callback mutation, owners, cancellation,
-individual and global pauses, scaled and unscaled deadlines, and validation.
+individual and global pauses, scaled and unscaled deadlines, remaining time,
+restarting active and inactive handles, and validation.
 Tests control only clock inputs; they do not prove PlayerLoop execution in
 Play Mode or real audio and scene behavior.
 

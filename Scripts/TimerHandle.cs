@@ -16,9 +16,13 @@ public class TimerHandle
     internal float Interval;
     internal bool Repeat;
     internal bool EveryFrame;
+    internal bool RestartedDuringTick;
 
-    public bool IsActive => active && (target == null || target.TryGetTarget(out var owner) && owner != null);
+    internal bool IsAlive => target == null || target.TryGetTarget(out var owner) && owner != null;
+
+    public bool IsActive => active && IsAlive;
     public bool IsPaused => IsActive && isPaused;
+    public float Remaining => !IsActive || EveryFrame ? 0 : isPaused ? remaining : Mathf.Max(0, EndTime - Timer.GetTime(UnscaledTime));
 
     internal TimerHandle(Action callback, UnityEngine.Object owner, bool unscaledTime)
     {
@@ -28,6 +32,9 @@ public class TimerHandle
     }
 
     public void Cancel() {active = false;}
+
+    public bool Restart() {return Restart(Interval);}
+    public bool Restart(float delay) {return Timer.Restart(this, delay);}
 
     public void Pause()
     {
@@ -41,5 +48,13 @@ public class TimerHandle
         if (!IsActive || !isPaused) return;
         EndTime = Timer.GetTime(UnscaledTime) + remaining;
         isPaused = false;
+    }
+
+    internal void RestartTimer(float delay)
+    {
+        active = true;
+        Interval = delay;
+        EndTime = Timer.GetTime(UnscaledTime) + delay;
+        if (isPaused) remaining = delay;
     }
 }

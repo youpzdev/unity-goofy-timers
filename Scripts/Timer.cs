@@ -76,10 +76,23 @@ public static class Timer
         return (paused ? pauseStartTime : Time.time) - pausedTime;
     }
 
+    internal static bool Restart(TimerHandle timer, float delay)
+    {
+        ValidateDelay(delay, nameof(delay));
+        if (timer.EveryFrame && delay != 0)
+            throw new ArgumentOutOfRangeException(nameof(delay), delay, "Timer.OnUpdate: задержка должна быть равна нулю");
+        if (!timer.IsAlive) return false;
+
+        timer.RestartTimer(delay);
+        timer.RestartedDuringTick = ticking;
+        if (!timers.Contains(timer)) timers.Add(timer);
+
+        return true;
+    }
+
     private static TimerHandle Add(float delay, Action callback, UnityEngine.Object target, bool unscaledTime, bool repeat, bool everyFrame)
     {
-        if (float.IsNaN(delay) || float.IsInfinity(delay) || delay < 0)
-            throw new ArgumentOutOfRangeException(repeat ? "interval" : "delay", delay, "Timer: время должно быть конечным и не меньше нуля");
+        ValidateDelay(delay, repeat ? "interval" : "delay");
         if (callback == null) throw new ArgumentNullException(nameof(callback), "Timer: обработчик не задан");
 
         var timer = new TimerHandle(callback, target, unscaledTime)
@@ -92,6 +105,12 @@ public static class Timer
         timers.Add(timer);
 
         return timer;
+    }
+
+    private static void ValidateDelay(float delay, string parameter)
+    {
+        if (float.IsNaN(delay) || float.IsInfinity(delay) || delay < 0)
+            throw new ArgumentOutOfRangeException(parameter, delay, "Timer: время должно быть конечным и не меньше нуля");
     }
 
     private static void Tick() {ProcessTimers(GetTime(false), GetTime(true));}
@@ -107,7 +126,7 @@ public static class Timer
             for (int i = 0; i < count && !paused; i++)
             {
                 var timer = timers[i];
-                if (!timer.IsActive || timer.IsPaused) continue;
+                if (!timer.IsActive || timer.IsPaused || timer.RestartedDuringTick) continue;
 
                 float now = timer.UnscaledTime ? unscaledNow : scaledNow;
                 if (!timer.EveryFrame && now < timer.EndTime) continue;
@@ -122,7 +141,7 @@ public static class Timer
         finally
         {
             ticking = false;
-            timers.RemoveAll(timer => !timer.IsActive);
+            timers.RemoveAll(timer => {timer.RestartedDuringTick = false; return !timer.IsActive;});
         }
     }
 

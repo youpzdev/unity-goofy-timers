@@ -291,6 +291,213 @@ public class TimerTests
         Assert.Throws<ArgumentNullException>(() => Timer.OnUpdate(null));
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void RemainingUsesSelectedClockAndFreezesDuringIndividualPause(bool unscaledTime)
+    {
+        var timer = Timer.Schedule(5, () => {}, unscaledTime: unscaledTime);
+        var offset = typeof(Timer).GetField(unscaledTime ? "pausedUnscaledTime" : "pausedTime", BindingFlags.Static | BindingFlags.NonPublic);
+        float originalOffset = (float)offset.GetValue(null);
+
+        try
+        {
+            Assert.That(timer.Remaining, Is.EqualTo(5).Within(0.05f));
+            offset.SetValue(null, originalOffset - 2);
+            Assert.That(timer.Remaining, Is.EqualTo(3).Within(0.05f));
+            timer.Pause();
+            offset.SetValue(null, originalOffset - 100);
+            Assert.That(timer.Remaining, Is.EqualTo(3).Within(0.05f), "Individual pause must freeze the remaining delay");
+            timer.Cancel();
+            Assert.That(timer.Remaining, Is.Zero);
+        }
+        finally {offset.SetValue(null, originalOffset);}
+    }
+
+    [Test]
+    public void CompletedAndCancelledHandlesRestartWithTheLastConfiguredDelay()
+    {
+        int calls = 0;
+        var timer = Timer.Schedule(0, () => calls++);
+        Tick();
+        Assert.That(timer.Remaining, Is.Zero);
+        Assert.That(timer.Restart(3), Is.True);
+        Assert.That(timer.Remaining, Is.EqualTo(3).Within(0.05f));
+        Process(Deadline(timer), 0);
+        Assert.That(calls, Is.EqualTo(2));
+        Assert.That(timer.Restart(), Is.True);
+        Assert.That(timer.Remaining, Is.EqualTo(3).Within(0.05f), "Restart must retain the last explicit delay");
+        timer.Cancel();
+        Tick();
+        Assert.That(timer.Restart(), Is.True, "A removed cancelled handle must rejoin the scheduler");
+        Process(Deadline(timer), 0);
+        Assert.That(calls, Is.EqualTo(3));
+    }
+
+    [Test]
+    public void RestartPreservesIndividualPauseAndChangesItsRemainingDelay()
+    {
+        int calls = 0;
+        var timer = Timer.Schedule(5, () => calls++);
+        timer.Pause();
+        Assert.That(timer.Restart(2), Is.True);
+        Assert.That(timer.IsPaused, Is.True);
+        Assert.That(timer.Remaining, Is.EqualTo(2));
+        Process(float.MaxValue, float.MaxValue);
+        Assert.That(calls, Is.Zero);
+
+        timer.Resume();
+        float deadline = Deadline(timer);
+        Process(deadline - 0.01f, 0);
+        Assert.That(calls, Is.Zero);
+        Process(deadline, 0);
+        Assert.That(calls, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void RestartOfCancelledPausedHandlePreservesItsPause()
+    {
+        int calls = 0;
+        var timer = Timer.Schedule(5, () => calls++);
+        timer.Pause();
+        timer.Cancel();
+        Tick();
+        Assert.That(timer.Restart(2), Is.True);
+        Assert.That(timer.IsActive, Is.True);
+        Assert.That(timer.IsPaused, Is.True);
+        Assert.That(timer.Remaining, Is.EqualTo(2));
+        Process(float.MaxValue, float.MaxValue);
+        Assert.That(calls, Is.Zero);
+
+        timer.Resume();
+        Process(Deadline(timer), 0);
+        Assert.That(calls, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void RestartAfterCancelAllRestoresOnlyTheChosenHandle()
+    {
+        int calls = 0;
+        var timer = Timer.Schedule(0, () => calls++);
+        Timer.Schedule(0, () => calls += 100);
+        Timer.CancelAll();
+        Assert.That(timer.Restart(), Is.True);
+
+        Tick();
+        Assert.That(calls, Is.EqualTo(1));
+    }
+
+    [TestCase(false)]
+    [TestCase(true)]
+    public void RestartDuringGlobalPauseStartsItsDelayAfterResume(bool unscaledTime)
+    {
+        int calls = 0;
+        var timer = Timer.Schedule(5, () => calls++, unscaledTime: unscaledTime);
+        Timer.Pause();
+        var start = typeof(Timer).GetField(unscaledTime ? "pauseStartUnscaledTime" : "pauseStartTime", BindingFlags.Static | BindingFlags.NonPublic);
+        start.SetValue(null, (unscaledTime ? Time.unscaledTime : Time.time) - 100);
+        Assert.That(timer.Restart(3), Is.True);
+        Assert.That(timer.Remaining, Is.EqualTo(3).Within(0.05f));
+        Process(float.MaxValue, float.MaxValue);
+        Assert.That(calls, Is.Zero);
+
+        Timer.Resume();
+        Assert.That(timer.Remaining, Is.EqualTo(3).Within(0.05f));
+        float deadline = Deadline(timer);
+        Process(deadline - 0.01f, deadline - 0.01f);
+        Assert.That(calls, Is.Zero);
+        Process(deadline, deadline);
+        Assert.That(calls, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void RepeatingHandleUsesNewRestartIntervalWithoutDuplicateRegistration()
+    {
+        int calls = 0;
+        var timer = Timer.Every(2, () => calls++);
+        Assert.That(timer.Restart(5), Is.True);
+        Assert.That(timer.Restart(), Is.True);
+        float now = Deadline(timer);
+        Process(now, 0);
+        Assert.That(calls, Is.EqualTo(1));
+        Process(now + 4.99f, 0);
+        Assert.That(calls, Is.EqualTo(1));
+        Process(now + 5, 0);
+        Assert.That(calls, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void RestartFromOwnCallbackRunsOnNextTickAndSurvivesCleanup()
+    {
+        int calls = 0;
+        TimerHandle timer = null;
+        timer = Timer.Schedule(0, () => {if (++calls == 1) Assert.That(timer.Restart(), Is.True);});
+
+        Tick();
+        Assert.That(calls, Is.EqualTo(1));
+        Assert.That(timer.IsActive, Is.True);
+        Tick();
+        Assert.That(calls, Is.EqualTo(2));
+        Assert.That(timer.IsActive, Is.False);
+    }
+
+    [Test]
+    public void RestartFromEarlierCallbackDefersTheTargetUntilNextTick()
+    {
+        int calls = 0;
+        TimerHandle target = null;
+        Timer.After(0, () => target.Restart());
+        target = Timer.Schedule(0, () => calls++);
+
+        Tick();
+        Assert.That(calls, Is.Zero, "Restart must defer an existing later entry as well as newly inserted handles");
+        Tick();
+        Assert.That(calls, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void DestroyedOwnerCannotBeRevivedByRestart()
+    {
+        int calls = 0;
+        var owner = new GameObject("Restart owner");
+        var timer = Timer.Schedule(0, () => calls++, owner);
+        UnityEngine.Object.DestroyImmediate(owner);
+
+        Assert.That(timer.Restart(), Is.False);
+        Assert.That(timer.Restart(2), Is.False);
+        Assert.That(timer.IsActive, Is.False);
+        Assert.That(timer.Remaining, Is.Zero);
+        Tick();
+        Assert.That(calls, Is.Zero);
+    }
+
+    [Test]
+    public void FrameHandleRestartRequiresZeroDelay()
+    {
+        int calls = 0;
+        var timer = Timer.OnUpdate(() => calls++);
+        Assert.That(timer.Remaining, Is.Zero);
+        Assert.Throws<ArgumentOutOfRangeException>(() => timer.Restart(1));
+        timer.Cancel();
+        Assert.That(timer.Restart(), Is.True);
+        Tick();
+        Assert.That(calls, Is.EqualTo(1));
+        Assert.That(timer.Remaining, Is.Zero);
+    }
+
+    [TestCase(-1f)]
+    [TestCase(float.NaN)]
+    [TestCase(float.PositiveInfinity)]
+    [TestCase(float.NegativeInfinity)]
+    public void InvalidRestartDelayDoesNotChangeTheTimer(float delay)
+    {
+        var timer = Timer.Schedule(5, () => {});
+        float deadline = Deadline(timer);
+        var error = Assert.Throws<ArgumentOutOfRangeException>(() => timer.Restart(delay));
+        Assert.That(error.ParamName, Is.EqualTo("delay"));
+        Assert.That(Deadline(timer), Is.EqualTo(deadline));
+        Assert.That(timer.IsActive, Is.True);
+    }
+
     private static float Deadline(TimerHandle timer) {return (float)typeof(TimerHandle).GetField("EndTime", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(timer);}
     private static void Process(float scaledNow, float unscaledNow) {process.Invoke(null, new object[] { scaledNow, unscaledNow });}
 
