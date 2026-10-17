@@ -6,21 +6,23 @@ using UnityEngine.PlayerLoop;
 
 public static class Timer
 {
-    private class TimerEntry
-    {
-        public float endTime;
-        public float interval;
-        public bool repeat;
-        public Action callback;
-        public bool cancelled;
-        public WeakReference<UnityEngine.Object> target;
-    }
-
-    private static readonly List<TimerEntry> timers = new();
-    private static readonly List<TimerEntry> everyFrameTimers = new();
+    private static readonly List<TimerHandle> timers = new();
 
     private static float pauseStartTime;
+    private static float pauseStartUnscaledTime;
+    private static float pausedTime;
+    private static float pausedUnscaledTime;
     private static bool paused;
+    private static bool ticking;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetStatics()
+    {
+        CancelAll();
+        paused = false;
+        pausedTime = pausedUnscaledTime = 0;
+        Application.quitting -= Cleanup;
+    }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Init()
@@ -28,140 +30,123 @@ public static class Timer
         var loop = PlayerLoop.GetCurrentPlayerLoop();
         InjectInto<Update>(ref loop, Tick);
         PlayerLoop.SetPlayerLoop(loop);
+        Application.quitting -= Cleanup;
         Application.quitting += Cleanup;
     }
 
     public static Action After(float delay, Action callback, UnityEngine.Object target = null)
-    {
-        var entry = new TimerEntry
-        {
-            endTime = Time.time + delay,
-            callback = callback,
-            target = target != null ? new WeakReference<UnityEngine.Object>(target) : null
-        };
-        timers.Add(entry);
-        return () => entry.cancelled = true;
-    }
+        => Schedule(delay, callback, target).Cancel;
 
     public static Action Repeat(float interval, Action callback, UnityEngine.Object target = null)
-    {
-        var entry = new TimerEntry
-        {
-            endTime = Time.time + interval,
-            interval = interval,
-            repeat = true,
-            callback = callback,
-            target = target != null ? new WeakReference<UnityEngine.Object>(target) : null
-        };
-        timers.Add(entry);
-        return () => entry.cancelled = true;
-    }
+        => Every(interval, callback, target).Cancel;
 
     public static Action EveryFrame(Action callback, UnityEngine.Object target = null)
-    {
-        var entry = new TimerEntry
-        {
-            callback = callback,
-            target = target != null ? new WeakReference<UnityEngine.Object>(target) : null
-        };
-        everyFrameTimers.Add(entry);
-        return () => entry.cancelled = true;
-    }
+        => OnUpdate(callback, target).Cancel;
+
+    public static TimerHandle Schedule(float delay, Action callback, UnityEngine.Object target = null, bool unscaledTime = false)
+        => Add(delay, callback, target, unscaledTime, false, false);
+
+    public static TimerHandle Every(float interval, Action callback, UnityEngine.Object target = null, bool unscaledTime = false)
+        => Add(interval, callback, target, unscaledTime, true, false);
+
+    public static TimerHandle OnUpdate(Action callback, UnityEngine.Object target = null, bool unscaledTime = false)
+        => Add(0, callback, target, unscaledTime, true, true);
 
     public static void CancelAll()
     {
-        timers.Clear();
-        everyFrameTimers.Clear();
+        foreach (var timer in timers) timer.Cancel();
+        if (!ticking) timers.Clear();
     }
 
     public static void Pause()
     {
         if (paused) return;
-        paused = true;
         pauseStartTime = Time.time;
+        pauseStartUnscaledTime = Time.unscaledTime;
+        paused = true;
     }
 
     public static void Resume()
     {
         if (!paused) return;
-        float pauseDuration = Time.time - pauseStartTime;
-        foreach (var entry in timers) entry.endTime += pauseDuration;
+        pausedTime += Time.time - pauseStartTime;
+        pausedUnscaledTime += Time.unscaledTime - pauseStartUnscaledTime;
         paused = false;
     }
 
-    private static bool IsAlive(TimerEntry entry)
+    internal static float GetTime(bool unscaledTime)
     {
-        if (entry.target == null) return true;
-        return entry.target.TryGetTarget(out var obj) && obj != null;
+        if (unscaledTime) return (paused ? pauseStartUnscaledTime : Time.unscaledTime) - pausedUnscaledTime;
+
+        return (paused ? pauseStartTime : Time.time) - pausedTime;
+    }
+
+    private static TimerHandle Add(float delay, Action callback, UnityEngine.Object target, bool unscaledTime, bool repeat, bool everyFrame)
+    {
+        if (float.IsNaN(delay) || float.IsInfinity(delay) || delay < 0)
+            throw new ArgumentOutOfRangeException(repeat ? "interval" : "delay", delay, "Timer: время должно быть конечным и не меньше нуля");
+        if (callback == null) throw new ArgumentNullException(nameof(callback), "Timer: обработчик не задан");
+
+        var timer = new TimerHandle(callback, target, unscaledTime)
+        {
+            EndTime = GetTime(unscaledTime) + delay,
+            Interval = delay,
+            Repeat = repeat,
+            EveryFrame = everyFrame
+        };
+        timers.Add(timer);
+
+        return timer;
     }
 
     private static void Tick()
     {
-        if (paused) return;
-
-        float now = Time.time;
-
-        for (int i = 0; i < timers.Count; i++)
-        {
-            var entry = timers[i];
-
-            if (entry.cancelled || !IsAlive(entry))
-            {
-                timers[i] = timers[timers.Count - 1];
-                timers.RemoveAt(timers.Count - 1);
-                i--;
-                continue;
-            }
-
-            if (now < entry.endTime) continue;
-
-            try { entry.callback?.Invoke(); }
-            catch (Exception e) { Debug.LogException(e); }
-
-            if (entry.repeat)
-                entry.endTime = now + entry.interval;
-            else
-            {
-                timers[i] = timers[timers.Count - 1];
-                timers.RemoveAt(timers.Count - 1);
-                i--;
-            }
-        }
-
-        for (int i = 0; i < everyFrameTimers.Count; i++)
-        {
-            var entry = everyFrameTimers[i];
-
-            if (entry.cancelled || !IsAlive(entry))
-            {
-                everyFrameTimers[i] = everyFrameTimers[everyFrameTimers.Count - 1];
-                everyFrameTimers.RemoveAt(everyFrameTimers.Count - 1);
-                i--;
-                continue;
-            }
-
-            try { entry.callback?.Invoke(); }
-            catch (Exception e) { Debug.LogException(e); }
-        }
+        ProcessTimers(GetTime(false), GetTime(true));
     }
 
-    private static void Cleanup()
+    private static void ProcessTimers(float scaledNow, float unscaledNow)
     {
-        timers.Clear();
-        everyFrameTimers.Clear();
+        if (paused || ticking) return;
+        ticking = true;
+        int count = timers.Count;
+
+        try
+        {
+            for (int i = 0; i < count && !paused; i++)
+            {
+                var timer = timers[i];
+                if (!timer.IsActive || timer.IsPaused) continue;
+
+                float now = timer.UnscaledTime ? unscaledNow : scaledNow;
+                if (!timer.EveryFrame && now < timer.EndTime) continue;
+
+                if (timer.Repeat) timer.EndTime = now + timer.Interval;
+                else timer.Cancel();
+
+                try { timer.Callback(); }
+                catch (Exception e) { Debug.LogException(e); }
+            }
+        }
+        finally
+        {
+            ticking = false;
+            timers.RemoveAll(timer => !timer.IsActive);
+        }
     }
+
+    private static void Cleanup() => ResetStatics();
 
     private static void InjectInto<T>(ref PlayerLoopSystem loop, PlayerLoopSystem.UpdateFunction fn)
     {
+        if (loop.subSystemList == null) return;
         for (int i = 0; i < loop.subSystemList.Length; i++)
         {
             if (loop.subSystemList[i].type != typeof(T)) continue;
 
             var sub = loop.subSystemList[i];
-            var list = new List<PlayerLoopSystem>(sub.subSystemList ?? Array.Empty<PlayerLoopSystem>())
-            {
-                new PlayerLoopSystem { type = typeof(Timer), updateDelegate = fn }
-            };
+            var list = new List<PlayerLoopSystem>(sub.subSystemList ?? Array.Empty<PlayerLoopSystem>());
+            list.RemoveAll(system => system.type == typeof(Timer));
+            list.Add(new PlayerLoopSystem { type = typeof(Timer), updateDelegate = fn });
             sub.subSystemList = list.ToArray();
             loop.subSystemList[i] = sub;
             return;
