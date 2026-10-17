@@ -4,8 +4,10 @@ using UnityEngine;
 public class TimerHandle
 {
     private readonly WeakReference<UnityEngine.Object> target;
+
     private bool active = true;
     private bool isPaused;
+
     private float remaining;
 
     internal readonly Action Callback;
@@ -25,7 +27,7 @@ public class TimerHandle
         target = ReferenceEquals(owner, null) ? null : new WeakReference<UnityEngine.Object>(owner);
     }
 
-    public void Cancel() => active = false;
+    public void Cancel() {active = false;}
 
     public void Pause()
     {

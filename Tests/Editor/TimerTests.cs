@@ -9,18 +9,10 @@ public class TimerTests
     private static readonly MethodInfo process = typeof(Timer).GetMethod("ProcessTimers", BindingFlags.Static | BindingFlags.NonPublic);
 
     [SetUp]
-    public void SetUp()
-    {
-        Timer.CancelAll();
-        Timer.Resume();
-    }
+    public void SetUp() {Timer.CancelAll(); Timer.Resume();}
 
     [TearDown]
-    public void TearDown()
-    {
-        Timer.CancelAll();
-        Timer.Resume();
-    }
+    public void TearDown() {Timer.CancelAll(); Timer.Resume();}
 
     [Test]
     public void CancelAllInsideAfterStopsPendingCallbacksWithoutBreakingTick()
@@ -156,7 +148,7 @@ public class TimerTests
             Assert.That(calls, Is.EqualTo(1));
             Assert.That(remaining, Is.InRange(4.9f, 5.01f));
         }
-        finally { offset.SetValue(null, originalOffset); }
+        finally {offset.SetValue(null, originalOffset);}
     }
 
     [Test]
@@ -199,7 +191,7 @@ public class TimerTests
     {
         int calls = 0;
         TimerHandle timer = null;
-        timer = Timer.Every(2, () => { calls++; if (calls == 2) timer.Cancel(); });
+        timer = Timer.Every(2, () => {calls++; if (calls == 2) timer.Cancel();});
         float now = Deadline(timer) + 100;
 
         Process(now, now);
@@ -233,7 +225,7 @@ public class TimerTests
     public void CancelAllAllowsNewTimerForNextTick()
     {
         int calls = 0;
-        Timer.After(0, () => { Timer.CancelAll(); Timer.After(0, () => calls++); });
+        Timer.After(0, () => {Timer.CancelAll(); Timer.After(0, () => calls++);});
         Timer.After(0, () => calls += 100);
 
         Tick();
@@ -246,7 +238,7 @@ public class TimerTests
     public void ReentrantTickDoesNotReenterRepeatingCallback()
     {
         int calls = 0;
-        Timer.Every(0, () => { if (++calls < 3) Tick(); });
+        Timer.Every(0, () => {if (++calls < 3) Tick();});
 
         Tick();
         Assert.That(calls, Is.EqualTo(1), "The same frame must not recursively execute the timer list");
@@ -285,8 +277,8 @@ public class TimerTests
     [TestCase(float.NegativeInfinity)]
     public void InvalidDelaysAreRejected(float delay)
     {
-        var scheduled = Assert.Throws<ArgumentOutOfRangeException>(() => Timer.Schedule(delay, () => { }));
-        var repeating = Assert.Throws<ArgumentOutOfRangeException>(() => Timer.Every(delay, () => { }));
+        var scheduled = Assert.Throws<ArgumentOutOfRangeException>(() => Timer.Schedule(delay, () => {}));
+        var repeating = Assert.Throws<ArgumentOutOfRangeException>(() => Timer.Every(delay, () => {}));
         Assert.That(scheduled.ParamName, Is.EqualTo("delay"));
         Assert.That(repeating.ParamName, Is.EqualTo("interval"));
     }
@@ -299,8 +291,8 @@ public class TimerTests
         Assert.Throws<ArgumentNullException>(() => Timer.OnUpdate(null));
     }
 
-    private static float Deadline(TimerHandle timer) => (float)typeof(TimerHandle).GetField("EndTime", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(timer);
-    private static void Process(float scaledNow, float unscaledNow) => process.Invoke(null, new object[] { scaledNow, unscaledNow });
+    private static float Deadline(TimerHandle timer) {return (float)typeof(TimerHandle).GetField("EndTime", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(timer);}
+    private static void Process(float scaledNow, float unscaledNow) {process.Invoke(null, new object[] { scaledNow, unscaledNow });}
 
-    private static void Tick() => tick.Invoke(null, null);
+    private static void Tick() {tick.Invoke(null, null);}
 }

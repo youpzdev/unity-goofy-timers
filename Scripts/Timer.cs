@@ -12,6 +12,7 @@ public static class Timer
     private static float pauseStartUnscaledTime;
     private static float pausedTime;
     private static float pausedUnscaledTime;
+
     private static bool paused;
     private static bool ticking;
 
@@ -34,23 +35,17 @@ public static class Timer
         Application.quitting += Cleanup;
     }
 
-    public static Action After(float delay, Action callback, UnityEngine.Object target = null)
-        => Schedule(delay, callback, target).Cancel;
+    public static Action After(float delay, Action callback, UnityEngine.Object target = null) {return Schedule(delay, callback, target).Cancel;}
 
-    public static Action Repeat(float interval, Action callback, UnityEngine.Object target = null)
-        => Every(interval, callback, target).Cancel;
+    public static Action Repeat(float interval, Action callback, UnityEngine.Object target = null) {return Every(interval, callback, target).Cancel;}
 
-    public static Action EveryFrame(Action callback, UnityEngine.Object target = null)
-        => OnUpdate(callback, target).Cancel;
+    public static Action EveryFrame(Action callback, UnityEngine.Object target = null) {return OnUpdate(callback, target).Cancel;}
 
-    public static TimerHandle Schedule(float delay, Action callback, UnityEngine.Object target = null, bool unscaledTime = false)
-        => Add(delay, callback, target, unscaledTime, false, false);
+    public static TimerHandle Schedule(float delay, Action callback, UnityEngine.Object target = null, bool unscaledTime = false) {return Add(delay, callback, target, unscaledTime, false, false);}
 
-    public static TimerHandle Every(float interval, Action callback, UnityEngine.Object target = null, bool unscaledTime = false)
-        => Add(interval, callback, target, unscaledTime, true, false);
+    public static TimerHandle Every(float interval, Action callback, UnityEngine.Object target = null, bool unscaledTime = false) {return Add(interval, callback, target, unscaledTime, true, false);}
 
-    public static TimerHandle OnUpdate(Action callback, UnityEngine.Object target = null, bool unscaledTime = false)
-        => Add(0, callback, target, unscaledTime, true, true);
+    public static TimerHandle OnUpdate(Action callback, UnityEngine.Object target = null, bool unscaledTime = false) {return Add(0, callback, target, unscaledTime, true, true);}
 
     public static void CancelAll()
     {
@@ -99,10 +94,7 @@ public static class Timer
         return timer;
     }
 
-    private static void Tick()
-    {
-        ProcessTimers(GetTime(false), GetTime(true));
-    }
+    private static void Tick() {ProcessTimers(GetTime(false), GetTime(true));}
 
     private static void ProcessTimers(float scaledNow, float unscaledNow)
     {
@@ -123,8 +115,8 @@ public static class Timer
                 if (timer.Repeat) timer.EndTime = now + timer.Interval;
                 else timer.Cancel();
 
-                try { timer.Callback(); }
-                catch (Exception e) { Debug.LogException(e); }
+                try {timer.Callback();}
+                catch (Exception e) {Debug.LogException(e);}
             }
         }
         finally
@@ -134,7 +126,7 @@ public static class Timer
         }
     }
 
-    private static void Cleanup() => ResetStatics();
+    private static void Cleanup() {ResetStatics();}
 
     private static void InjectInto<T>(ref PlayerLoopSystem loop, PlayerLoopSystem.UpdateFunction fn)
     {
@@ -149,6 +141,7 @@ public static class Timer
             list.Add(new PlayerLoopSystem { type = typeof(Timer), updateDelegate = fn });
             sub.subSystemList = list.ToArray();
             loop.subSystemList[i] = sub;
+
             return;
         }
     }

@@ -31,13 +31,13 @@ public class TimerTest : MonoBehaviour
 
     private void Toggle1()
     {
-        if (cancel1 != null) { cancel1(); cancel1 = null; return; }
+        if (cancel1 != null) {cancel1(); cancel1 = null; return;}
         cancel1 = Timer.Repeat(1f, AddCounter1);
     }
 
     private void Toggle2()
     {
-        if (cancel2 != null) { cancel2(); cancel2 = null; return; }
+        if (cancel2 != null) {cancel2(); cancel2 = null; return;}
         cancel2 = Timer.Repeat(3f, AddCounter2);
     }
 
@@ -48,6 +48,7 @@ public class TimerTest : MonoBehaviour
             cancelFrame(); cancelFrame = null;
             cancelFinish(); cancelFinish = null;
             countdownText.text = "10.00";
+
             return;
         }
 
@@ -69,6 +70,6 @@ public class TimerTest : MonoBehaviour
         cancelFrame = null;
     }
 
-    private void AddCounter1() => counter1Text.text = (++counter1).ToString();
-    private void AddCounter2() => counter2Text.text = (++counter2).ToString();
+    private void AddCounter1() {counter1Text.text = (++counter1).ToString();}
+    private void AddCounter2() {counter2Text.text = (++counter2).ToString();}
 }
